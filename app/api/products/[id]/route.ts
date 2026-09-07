@@ -18,6 +18,7 @@ export async function GET(
     if(rows.length === 0) {
       return Response.json(
         {
+          success: false,
           message: "Product not found"
         },
         {
@@ -26,12 +27,23 @@ export async function GET(
       )
     }
 
-    return Response.json(rows[0])
+    return Response.json(
+      {
+        success: true,
+        message: "Product fetched successfully!",
+        data: rows[0]
+      },
+      {
+        status: 200
+      }
+    )
+
   } catch (error) {
     console.error(error)
 
     return Response.json(
       {
+        success: false,
         message: "Failed to fetch product"
       },
       {
@@ -58,6 +70,7 @@ export async function PUT(
     if(result.affectedRows === 0) {
       return Response.json(
         {
+          success: false,
           message: "Product not found"
         },
         {
@@ -68,8 +81,14 @@ export async function PUT(
 
     return Response.json(
       {
+        success: true,
         message: "Product updated successfully!",
-        id
+        data: {
+          id
+        }
+      },
+      {
+        status: 200
       }
     )
  } catch (error) {
@@ -77,6 +96,7 @@ export async function PUT(
 
   return Response.json(
     {
+      success: false,
       message: "Failed to update product"
     },
     {
@@ -84,6 +104,124 @@ export async function PUT(
     }
   )
  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params } : { params: Promise<{ id: string}>}
+) {
+  
+  
+  try {
+    const { id } = await params
+  
+    const body = await request.json()
+  
+    if (body.price !== undefined &&
+      (
+        typeof body.price !== "number" || body.price <= 0
+      )
+    ) {
+      return Response.json(
+        {
+          success: false,
+          message: "Product price must be a number greater than 0"
+        },
+        {
+          status: 400
+        }
+      )
+    }
+  
+    if (body.name !== undefined && 
+      (
+        typeof body.name !== "string" || body.name.trim() === ""
+      )
+    ) {
+  
+      
+      return Response.json(
+        {
+          success: false,
+          message: "Product name must be a non-empty string"
+        },
+        {
+          status: 400
+        }
+      )
+    }
+  
+    const fields = []
+    const values = []
+  
+    if (body.name !== undefined) {
+      fields.push("name = ?")
+      values.push(body.name)
+    }
+  
+    if (body.price !== undefined) {
+      fields.push("price = ?")
+      values.push(body.price)
+    }
+  
+    if (fields.length === 0) {
+      return Response.json(
+        {
+          success: false,
+          message: "At least one field is required"
+        },
+        {
+          status: 400
+        }
+      )
+    }
+    
+    values.push(id)
+    const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`
+    const [result] = await db.execute<ResultSetHeader> (
+      sql,
+      values
+    )
+  
+    if (result.affectedRows === 0) {
+      return Response.json(
+        {
+          success: false,
+          message: "Product not found"
+        },
+        {
+          status: 404
+        }
+      )
+    }
+  
+    return Response.json(
+      {
+        success: true,
+        message: "Product updated successfully!",
+        data: {
+          id
+        }
+      },
+      {
+        status: 200
+      }
+    )
+    
+  } catch (error) {
+    console.error(error)
+
+    return Response.json(
+      {
+        success: false,
+        message: "Failed to update product"
+      },
+      {
+        status: 500
+      }
+    )
+  }
+
 }
 
 export async function DELETE(
@@ -101,6 +239,7 @@ export async function DELETE(
     if(result.affectedRows === 0) {
       return Response.json(
         {
+          success: false,
           message: "Product not found"
         },
         {
@@ -111,6 +250,7 @@ export async function DELETE(
 
     return Response.json(
       {
+        success: true,
         message: "Product deleted successfully!"
       },
       {
@@ -122,6 +262,7 @@ export async function DELETE(
 
     return Response.json(
       {
+        success: false,
         message: "Failed to delete product"
       },
       {
