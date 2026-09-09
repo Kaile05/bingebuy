@@ -211,14 +211,14 @@ export async function GET( request: Request ) {
 }
 
 export async function POST( request: Request) {
-  let body: CreateProductInput 
+  let body: unknown
   try {
+
     body = await request.json()
       
   } catch (error) {
     console.error(error)
 
-    
     return Response.json(
       {
         success: false,
@@ -231,8 +231,46 @@ export async function POST( request: Request) {
   }
 
   if (
-    typeof body.price !== "number" || 
-    body.price <=0) {
+    typeof body !== "object" || 
+    body === null ||
+    Array.isArray(body)
+  ) {
+
+    return Response.json(
+      {
+        success: false,
+        message: "Request body must be a JSON object"
+      },
+      {
+        status: 400
+      }
+    )
+  }
+
+  const data = body as Record<string, unknown>
+
+  const allowedFields = ["name", "price"]
+
+  const unexpectedFields = Object.keys(data).filter(
+    field => !allowedFields.includes(field)
+  )
+
+  if (unexpectedFields.length > 0) {
+    return Response.json(
+      {
+        success: false,
+        message: "Request contains unexpected fields"
+      },
+      {
+        status: 400
+      }
+    )
+  }
+
+  if (
+    typeof data.price !== "number" || 
+    data.price <=0) {
+
     return Response.json(
       {
         success: false,
@@ -245,8 +283,8 @@ export async function POST( request: Request) {
   }
 
   if (
-    typeof body.name !== "string" || 
-    body.name.trim() === "") {
+    typeof data.name !== "string" || 
+    data.name.trim() === "") {
     return Response.json(
       {
         success: false,
@@ -257,10 +295,18 @@ export async function POST( request: Request) {
       }
     )
   }
+
+  const productName = data.name.trim()
+
+  const product: CreateProductInput = {
+    name: productName,
+    price: data.price
+  }
+
   try {
     const [result] = await db.execute<ResultSetHeader> (
       "INSERT INTO products (name, price) VALUES (?, ?)",
-      [body.name, body.price]
+      [product.name, product.price]
     )
   
     return Response.json(
@@ -269,8 +315,8 @@ export async function POST( request: Request) {
         message: "Product created successfully!",
         data: {
           id: result.insertId,
-          name: body.name,
-          price: body.price
+          name: product.name,
+          price: product.price
         }
       },
       {
