@@ -1,10 +1,13 @@
-import { db} from "@/lib/db";
-import { validateProductId, validateProductData } from "@/lib/validation";
-import { handleError } from "@/lib/error";
+import { db } from "@/lib/db"
+import { handleError } from "@/lib/error"
+import { RowDataPacket, ResultSetHeader } from "mysql2"
+import { successResponse, errorResponse } from "@/lib/response"
 import { 
-  RowDataPacket,
-  ResultSetHeader
- } from "mysql2";
+  validateProductId, 
+  validateProductData, 
+  validatePatchData,
+  hasUnexpectedFields
+ } from "@/lib/validation"
 
 export async function GET(
   request: Request,
@@ -14,14 +17,9 @@ export async function GET(
   const productId = validateProductId(id)
 
   if (productId === null) {
-    return Response.json(
-      {
-        success: false,
-        message: "Product ID must be a positive integer"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Product ID must be a positive integer",
+      400
     )
   }
 
@@ -32,26 +30,15 @@ export async function GET(
     )
 
     if(rows.length === 0) {
-      return Response.json(
-        {
-          success: false,
-          message: "Product not found"
-        },
-        {
-          status: 404
-        }
+      return errorResponse(
+        "Product not found",
+        404
       )
     }
 
-    return Response.json(
-      {
-        success: true,
-        message: "Product fetched successfully!",
-        data: rows[0]
-      },
-      {
-        status: 200
-      }
+    return successResponse(
+      "Product fetched successfully!",
+      rows[0],
     )
 
   } catch (error) {
@@ -73,14 +60,9 @@ export async function PUT(
   const productId = validateProductId(id)
 
   if (productId === null) {
-    return Response.json(
-      {
-        success: false,
-        message: "Product ID must be a positive integer"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Product ID must be a positive integer",
+      400
     )
   }
 
@@ -89,14 +71,9 @@ export async function PUT(
   } catch (error) {
     console.error (error)
 
-    return Response.json(
-      {
-        success: false,
-        message: "Invalid request"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Invalid request",
+      400
     )
   }
 
@@ -105,48 +82,27 @@ export async function PUT(
     body === null ||
     Array.isArray(body)
   ) {
-    return Response.json(
-      {
-        success: false,
-        message: "Request body must be a JSON object"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Request body must be a JSON object",
+      400
     )
   }
 
   const data = body as Record<string, unknown>
-  const product = validateProductData(data)
 
-  if (product === null) {
-    return Response.json(
-      {
-        success: false,
-        message: "Invalid product data"
-      },
-      {
-        status: 400
-      }
+  if (hasUnexpectedFields(data, ["name", "price"])) {
+    return errorResponse(
+      "Request contains unexpected fields",
+      400
     )
   }
 
+  const product = validateProductData(data)
 
-  const allowedFields = ["name", "price"]
-
-  const unexpectedFields = Object.keys(data).filter(
-    field => !allowedFields.includes(field)
-  )
-
-  if (unexpectedFields.length > 0) {
-    return Response.json(
-      {
-        success: false,
-        message: "Request contains unexpected fields"
-      },
-      {
-        status: 400
-      }
+  if (product === null) {
+    return errorResponse(
+      "Invalid product data",
+      400
     )
   }
 
@@ -158,29 +114,17 @@ export async function PUT(
     )
 
     if(result.affectedRows === 0) {
-      return Response.json(
-        {
-          success: false,
-          message: "Product not found"
-        },
-        {
-          status: 404
-        }
+      return errorResponse(
+        "Product not found",
+        404
       )
     }
 
-    return Response.json(
-      {
-        success: true,
-        message: "Product updated successfully!",
-        data: {
-          id: productId
-        }
-      },
-      {
-        status: 200
-      }
+    return successResponse(
+      "Product updated successfully!",
+      productId
     )
+
  } catch (error) {
   return handleError(
     error,
@@ -199,14 +143,9 @@ export async function PATCH(
   const productId = validateProductId(id)
 
   if (productId === null) {
-    return Response.json(
-      {
-        success: false,
-        message: "Product ID must be a positive integer"
-      },
-      {
-        status: 400
-      }
+    return errorResponse (
+      "Product ID must be a positive integer",
+      400
     )
   }
 
@@ -215,14 +154,9 @@ export async function PATCH(
     body = await request.json()
     
   } catch (error) {
-    return Response.json(
-      {
-        success: false,
-        message: "Invalid request"
-      },
-      {
-        status: 400
-      }
+    return errorResponse (
+      "Invalid request",
+      400
     )
   }
 
@@ -231,96 +165,43 @@ export async function PATCH(
     body === null ||
     Array.isArray(body)
   ) {
-    return Response.json(
-      {
-        success: false,
-        message: "Request body must be a JSON object"
-      },
-      {
-        status: 400
-      }
+    return errorResponse (
+      "Request body must be a JSON object",
+      400
     )
   }
 
   const data = body as Record<string, unknown>
 
-  const allowedFields = ["name", "price"]
-
-  const unexpectedFields = Object.keys(data).filter(
-    field => !allowedFields.includes(field)
-  )
-
-  if (unexpectedFields.length > 0) {
-    return Response.json(
-      {
-        success: false,
-        message: "Request contains unexpected fields"
-      },
-      {
-        status: 400
-      }
+  if (hasUnexpectedFields(data, ["name", "price"])) {
+    return errorResponse (
+      "Request contains unexpected fields",
+      400
     )
   }
 
-  if (data.price !== undefined &&
-      (
-        typeof data.price !== "number" 
-        || data.price <= 0
-      )
-    ) {
-      return Response.json(
-        {
-          success: false,
-          message: "Product price must be a number greater than 0"
-        },
-        {
-          status: 400
-        }
-      )
-    }
-  
-    if (data.name !== undefined && 
-      (
-        typeof data.name !== "string" 
-        || data.name.trim() === ""
-      )
-    ) {
-      return Response.json(
-        {
-          success: false,
-          message: "Product name must be a non-empty string"
-        },
-        {
-          status: 400
-        }
-      )
-    }
-  
+  const product = validatePatchData(data)
+
+  if (product === null) {
+    return errorResponse(
+      "Invalid product data",
+      400
+    )
+  }
+
   try {
 
     const fields: string[] = []
     const values: (string | number)[] = []
-  
-    if (typeof data.name === "string") {
+
+    if (product.name !== undefined) {
       fields.push("name = ?")
-      values.push(data.name.trim())
+      values.push(product.name)
     }
-  
-    if (typeof data.price === "number") {
+
+    if (product.price !== undefined) {
       fields.push("price = ?")
-      values.push(data.price)
-    }
-  
-    if (fields.length === 0) {
-      return Response.json(
-        {
-          success: false,
-          message: "At least one field is required"
-        },
-        {
-          status: 400
-        }
-      )
+      values.push(product.price)
     }
     
     values.push(productId)
@@ -331,28 +212,15 @@ export async function PATCH(
     )
   
     if (result.affectedRows === 0) {
-      return Response.json(
-        {
-          success: false,
-          message: "Product not found"
-        },
-        {
-          status: 404
-        }
+      return errorResponse(
+        "Product not found",
+        404
       )
     }
   
-    return Response.json(
-      {
-        success: true,
-        message: "Product updated successfully!",
-        data: {
-          id: productId
-        }
-      },
-      {
-        status: 200
-      }
+    return successResponse (
+      "Product updated successfully!",
+      productId
     )
     
   } catch (error) {
@@ -371,14 +239,9 @@ export async function DELETE(
   const productId = validateProductId(id)
 
   if (productId === null) {
-    return Response.json(
-      {
-        success: false,
-        message: "Product ID must be a positive integer"
-      },
-      {
-        status: 400
-      }
+    return errorResponse (
+      "Product ID must be a positive integer",
+      400
     )
   }
 
@@ -390,28 +253,15 @@ export async function DELETE(
     )
 
     if(result.affectedRows === 0) {
-      return Response.json(
-        {
-          success: false,
-          message: "Product not found"
-        },
-        {
-          status: 404
-        }
+      return errorResponse (
+        "Product not found",
+        404
       )
     }
 
-    return Response.json(
-      {
-        success: true,
-        message: "Product deleted successfully!",
-        data: {
-          id: productId
-        }
-      },
-      {
-        status: 200
-      }
+    return successResponse (
+      "Product deleted successfully!",
+      productId
     )
   } catch (error) {
     return handleError(
