@@ -1,5 +1,6 @@
-import { db } from "@/lib/db";
-import { CreateProductInput } from "@/types/product";
+import { db} from "@/lib/db";
+import { validateProductId, validateProductData } from "@/lib/validation";
+import { handleError } from "@/lib/error";
 import { 
   RowDataPacket,
   ResultSetHeader
@@ -9,11 +10,25 @@ export async function GET(
   request: Request,
   { params }:{ params: Promise<{ id: string }>}
 ) {
+  const { id } = await params
+  const productId = validateProductId(id)
+
+  if (productId === null) {
+    return Response.json(
+      {
+        success: false,
+        message: "Product ID must be a positive integer"
+      },
+      {
+        status: 400
+      }
+    )
+  }
+
   try {
-    const { id } = await params
     const [rows] = await db.query<RowDataPacket[]>(
       "SELECT * FROM products WHERE id=?",
-      [id]
+      [productId]
     )
 
     if(rows.length === 0) {
@@ -40,16 +55,9 @@ export async function GET(
     )
 
   } catch (error) {
-    console.error(error)
-
-    return Response.json(
-      {
-        success: false,
-        message: "Failed to fetch product"
-      },
-      {
-        status: 500
-      }
+    return handleError(
+      error,
+      "Failed to fetch product"
     )
   }
 }
@@ -60,6 +68,21 @@ export async function PUT(
 ) {
 
   let body: unknown
+
+  const { id } = await params
+  const productId = validateProductId(id)
+
+  if (productId === null) {
+    return Response.json(
+      {
+        success: false,
+        message: "Product ID must be a positive integer"
+      },
+      {
+        status: 400
+      }
+    )
+  }
 
   try {
     body = await request.json()
@@ -94,15 +117,13 @@ export async function PUT(
   }
 
   const data = body as Record<string, unknown>
+  const product = validateProductData(data)
 
-  if (
-    typeof data.name !== "string" ||
-    data.name.trim() === ""
-  ) {
+  if (product === null) {
     return Response.json(
       {
         success: false,
-        message: "Product name is required"
+        message: "Invalid product data"
       },
       {
         status: 400
@@ -110,20 +131,6 @@ export async function PUT(
     )
   }
 
-  if (
-    typeof data.price !== "number" ||
-    data.price <= 0
-  ) {
-    return Response.json(
-      {
-        success: false,
-        message: "Product price must be greater than 0"
-      },
-      {
-        status: 400
-      }
-    )
-  }
 
   const allowedFields = ["name", "price"]
 
@@ -143,20 +150,11 @@ export async function PUT(
     )
   }
 
-  const productName = data.name.trim()
-
-  const product: CreateProductInput = {
-    name: productName,
-    price: data.price
-  }
-
  try {
-    
-    const { id } = await params
 
     const [result] = await db.execute<ResultSetHeader> (
       "UPDATE products SET name = ?, price =? WHERE id = ?",
-      [product.name, product.price, id]
+      [product.name, product.price, productId]
     )
 
     if(result.affectedRows === 0) {
@@ -176,7 +174,7 @@ export async function PUT(
         success: true,
         message: "Product updated successfully!",
         data: {
-          id
+          id: productId
         }
       },
       {
@@ -184,16 +182,9 @@ export async function PUT(
       }
     )
  } catch (error) {
-  console.error(error)
-
-  return Response.json(
-    {
-      success: false,
-      message: "Failed to update product"
-    },
-    {
-      status: 500
-    }
+  return handleError(
+    error,
+    "Failed to update product"
   )
  }
 }
@@ -204,6 +195,20 @@ export async function PATCH(
 ) {
 
   let body: unknown
+  const { id } = await params
+  const productId = validateProductId(id)
+
+  if (productId === null) {
+    return Response.json(
+      {
+        success: false,
+        message: "Product ID must be a positive integer"
+      },
+      {
+        status: 400
+      }
+    )
+  }
 
   try {
 
@@ -293,8 +298,6 @@ export async function PATCH(
   
   try {
 
-    const { id } = await params
-
     const fields: string[] = []
     const values: (string | number)[] = []
   
@@ -320,7 +323,7 @@ export async function PATCH(
       )
     }
     
-    values.push(id)
+    values.push(productId)
     const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`
     const [result] = await db.execute<ResultSetHeader> (
       sql,
@@ -344,7 +347,7 @@ export async function PATCH(
         success: true,
         message: "Product updated successfully!",
         data: {
-          id
+          id: productId
         }
       },
       {
@@ -353,16 +356,9 @@ export async function PATCH(
     )
     
   } catch (error) {
-    console.error(error)
-
-    return Response.json(
-      {
-        success: false,
-        message: "Failed to update product"
-      },
-      {
-        status: 500
-      }
+    return handleError(
+      error,
+      "Failed to update product"
     )
   }
 }
@@ -371,12 +367,26 @@ export async function DELETE(
   request: Request,
   { params } : { params: Promise<{ id: string }>}
 ) {
+  const { id } = await params
+  const productId = validateProductId(id)
+
+  if (productId === null) {
+    return Response.json(
+      {
+        success: false,
+        message: "Product ID must be a positive integer"
+      },
+      {
+        status: 400
+      }
+    )
+  }
+
   try {
-    const { id } = await params
 
     const [result] = await db.execute<ResultSetHeader> (
       "DELETE FROM products WHERE id = ?",
-      [id]
+      [productId]
     )
 
     if(result.affectedRows === 0) {
@@ -396,7 +406,7 @@ export async function DELETE(
         success: true,
         message: "Product deleted successfully!",
         data: {
-          id
+          id: productId
         }
       },
       {
@@ -404,16 +414,9 @@ export async function DELETE(
       }
     )
   } catch (error) {
-    console.error(error)
-
-    return Response.json(
-      {
-        success: false,
-        message: "Failed to delete product"
-      },
-      {
-        status: 500
-      }
+    return handleError(
+      error,
+      "Failed to delete product"
     )
   }  
 }
