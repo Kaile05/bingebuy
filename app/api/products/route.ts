@@ -1,13 +1,12 @@
-import { db } from "@/lib/db";
+import { db } from "@/lib/db"
 import { 
   RowDataPacket, 
   ResultSetHeader
-} from "mysql2";
-
+} from "mysql2"
 import { 
   DatabaseProduct,
   CreateProductInput
- } from "@/types/product";
+ } from "@/types/product"
 
 export async function GET( request: Request ) {
   const { searchParams } = new URL(request.url)
