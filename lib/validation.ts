@@ -1,5 +1,10 @@
 import { CreateProductInput, UpdateProductInput } from "@/types/product"
 
+export const PRODUCT_FIELDS = [
+  "name",
+  "price"
+]
+
 export function validateProductId (id: string): number | null {
   const productId = Number(id)
   if (

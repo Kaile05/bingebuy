@@ -1,12 +1,18 @@
-import { db } from "@/lib/db"
+
 import { handleError } from "@/lib/error"
-import { RowDataPacket, ResultSetHeader } from "mysql2"
 import { successResponse, errorResponse } from "@/lib/response"
+import { 
+  getProductById,
+  updateProduct,
+  updateProductFields,
+  deleteProduct
+} from "@/lib/product"
 import { 
   validateProductId, 
   validateProductData, 
   validatePatchData,
-  hasUnexpectedFields
+  hasUnexpectedFields,
+  PRODUCT_FIELDS
  } from "@/lib/validation"
 
 export async function GET(
@@ -24,12 +30,10 @@ export async function GET(
   }
 
   try {
-    const [rows] = await db.query<RowDataPacket[]>(
-      "SELECT * FROM products WHERE id=?",
-      [productId]
-    )
+    
+    const product = await getProductById(productId)
 
-    if(rows.length === 0) {
+    if(product === null) {
       return errorResponse(
         "Product not found",
         404
@@ -38,7 +42,7 @@ export async function GET(
 
     return successResponse(
       "Product fetched successfully!",
-      rows[0],
+      product
     )
 
   } catch (error) {
@@ -90,7 +94,7 @@ export async function PUT(
 
   const data = body as Record<string, unknown>
 
-  if (hasUnexpectedFields(data, ["name", "price"])) {
+  if (hasUnexpectedFields(data, PRODUCT_FIELDS)) {
     return errorResponse(
       "Request contains unexpected fields",
       400
@@ -108,9 +112,10 @@ export async function PUT(
 
  try {
 
-    const [result] = await db.execute<ResultSetHeader> (
-      "UPDATE products SET name = ?, price =? WHERE id = ?",
-      [product.name, product.price, productId]
+    const result = await updateProduct(
+      productId,
+      product.name,
+      product.price
     )
 
     if(result.affectedRows === 0) {
@@ -173,7 +178,7 @@ export async function PATCH(
 
   const data = body as Record<string, unknown>
 
-  if (hasUnexpectedFields(data, ["name", "price"])) {
+  if (hasUnexpectedFields(data, PRODUCT_FIELDS)) {
     return errorResponse (
       "Request contains unexpected fields",
       400
@@ -204,10 +209,9 @@ export async function PATCH(
       values.push(product.price)
     }
     
-    values.push(productId)
-    const sql = `UPDATE products SET ${fields.join(", ")} WHERE id = ?`
-    const [result] = await db.execute<ResultSetHeader> (
-      sql,
+    const result = await updateProductFields(
+      productId,
+      fields,
       values
     )
   
@@ -247,10 +251,7 @@ export async function DELETE(
 
   try {
 
-    const [result] = await db.execute<ResultSetHeader> (
-      "DELETE FROM products WHERE id = ?",
-      [productId]
-    )
+    const result = await deleteProduct(productId)
 
     if(result.affectedRows === 0) {
       return errorResponse (
