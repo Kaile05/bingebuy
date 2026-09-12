@@ -30,3 +30,17 @@ export type UpdateProductInput = {
   name?: string
   price?: number
 }
+
+export type ProductResponse = {
+    success: boolean,
+    message: string,
+    data: {
+      products: DatabaseProduct[],
+      pagination: {
+        limit: number,
+        page: number,
+        totalPage: number,
+        totalProducts: number
+      }
+    }
+  }
