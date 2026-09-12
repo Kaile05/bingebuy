@@ -1,12 +1,9 @@
 import { db } from "@/lib/db"
-import { 
-  RowDataPacket, 
-  ResultSetHeader
-} from "mysql2"
-import { 
-  DatabaseProduct,
-  CreateProductInput
- } from "@/types/product"
+import {  ResultSetHeader } from "mysql2"
+import { getProducts } from "@/lib/product"
+import { successResponse, errorResponse } from "@/lib/response"
+import { hasUnexpectedFields, PRODUCT_FIELDS, validateProductData } from "@/lib/validation"
+import { handleError } from "@/lib/error"
 
 export async function GET( request: Request ) {
   const { searchParams } = new URL(request.url)
@@ -21,60 +18,35 @@ export async function GET( request: Request ) {
   const pageNumber = Number(page)
   const limitNumber = Number(limit)
 
-  let sql = "SELECT * FROM products"
-  let countSql = "SELECT COUNT(*) AS total FROM products"
-
-  const conditions = []
-  const values = []
-
-  if (category) {
-    conditions.push("category = ?")
-    values.push(category)
-  }
-
   let minPriceNumber: number | undefined
   let maxPriceNumber: number | undefined
 
-  if (minPrice) {
+  if (minPrice !== null) {
     minPriceNumber = Number(minPrice)
-
-    if (Number.isNaN(minPriceNumber)) {
-      return Response.json(
-        {
-          success: false,
-          message: "minPrice must be a valid number"
-        },
-        {
-          status:400
-        }
-      )
-    }
-
-    conditions.push("price >= ?")
-    values.push(minPriceNumber)
   }
 
-  if (maxPrice) {
+  if (maxPrice !== null) {
     maxPriceNumber = Number(maxPrice)
-
-    if (Number.isNaN(maxPriceNumber)) {
-      return Response.json(
-        {
-          success: false,
-          message: "maxPrice must be a valid number"
-        },
-        {
-          status:400
-        }
-      )
-    }
-    conditions.push("price <= ?")
-    values.push(maxPriceNumber)
   }
 
-  if (search) {
-    conditions.push("name LIKE ?")
-    values.push(`%${search}%`)
+  if (
+    minPriceNumber !== undefined &&
+    Number.isNaN(minPriceNumber)
+  ) {
+    return errorResponse (
+      "minPrice must be a valid number",
+      400
+    )
+  }
+
+  if (
+    maxPriceNumber !== undefined &&
+    Number.isNaN(maxPriceNumber)
+  ) {
+    return errorResponse (
+      "maxPrice must be a valid number",
+      400
+    )
   }
 
   if (
@@ -82,25 +54,14 @@ export async function GET( request: Request ) {
     maxPriceNumber !== undefined &&
     minPriceNumber > maxPriceNumber
   ) {
-    return Response.json(
-      {
-        success: false,
-        message: "minPrice cannot be greater than maxPrice"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "minPrice cannot be greater than maxPrice",
+      400
     )
   }
 
+  
 
-  if (conditions.length > 0) {
-    sql += " WHERE " + conditions.join(" AND ")
-  }
-
-  if (conditions.length > 0) {
-    countSql += " WHERE " + conditions.join(" AND ")
-  }
 
   const allowedSorts = [
     "price_asc",
@@ -108,37 +69,19 @@ export async function GET( request: Request ) {
   ]
 
   if (sort && !allowedSorts.includes(sort)) {
-    return Response.json(
-      {
-        success: false,
-        message: "Invalid sort input"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Invalid sort input",
+      400
     )
-  }
-
-  if (sort === "price_asc") {
-    sql += " ORDER BY price ASC"
-  }
-
-  if (sort === "price_desc") {
-    sql += " ORDER BY price DESC"
   }
 
   if (
     !Number.isInteger(pageNumber) ||
     pageNumber < 1
   ) {
-    return Response.json(
-      {
-        success: false,
-        message: "Page must be a positive integer"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Page must be a positive integer",
+      400
     )
   }
 
@@ -147,64 +90,42 @@ export async function GET( request: Request ) {
     limitNumber < 1 ||
     limitNumber > 100
   ) {
-    return Response.json(
-      {
-        success: false,
-        message: "Limit must be between 1 and 100"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Limit must be between 1 and 100",
+      400
     )
   }
 
-
   try {
-    const [countRows] = await db.query<RowDataPacket[]> (
-      countSql,
-      values
-    )
 
-    const totalProducts = Number(countRows[0].total)
-    const totalPages = Math.ceil(totalProducts / limitNumber)
-
-    const offset = (pageNumber - 1) * limitNumber
-
-    sql += " LIMIT ? OFFSET ?"
-    values.push(limitNumber, offset)
-
-    const [rows] = await db.query<(DatabaseProduct & RowDataPacket)[]> (
-      sql, values
-    )
-
-    return Response.json(
+    const result = await getProducts({
+      category: category ?? undefined,
+      minPrice: minPriceNumber,
+      maxPrice: maxPriceNumber,
+      search: search ?? undefined,
+      sort: sort ?? undefined,
+      page: pageNumber,
+      limit: limitNumber
+    })
+  
+    return successResponse(
+      "Products fetched successfully!",
       {
-        success: true,
-        message: "Products fetched successfully!",
-        data: rows,
+        products: result.products,
         pagination: {
           page: pageNumber,
           limit: limitNumber,
-          totalProducts,
-          totalPages
+          totalProducts: result.totalProducts,
+          totalPages: result.totalPages
         }
-      },
-      {
-        status: 200
       }
-      
     )
   } catch (error) {
     console.error(error)
 
-    return Response.json(
-      {
-        success: false,
-        message: "Failed to fetch product"
-      },
-      {
-        status: 500
-      }
+    return handleError(
+      error,
+      "Failed to fetch product"
     )
   }
 }
@@ -218,14 +139,9 @@ export async function POST( request: Request) {
   } catch (error) {
     console.error(error)
 
-    return Response.json(
-      {
-        success: false,
-        message: "Invalid request"
-      },
-      {
-        status: 400
-      }
+    return errorResponse (
+      "Invalid request",
+      400
     )
   }
 
@@ -235,71 +151,28 @@ export async function POST( request: Request) {
     Array.isArray(body)
   ) {
 
-    return Response.json(
-      {
-        success: false,
-        message: "Request body must be a JSON object"
-      },
-      {
-        status: 400
-      }
+    return errorResponse(
+      "Request body must be a JSON object",
+      400
     )
   }
 
   const data = body as Record<string, unknown>
 
-  const allowedFields = ["name", "price"]
-
-  const unexpectedFields = Object.keys(data).filter(
-    field => !allowedFields.includes(field)
-  )
-
-  if (unexpectedFields.length > 0) {
-    return Response.json(
-      {
-        success: false,
-        message: "Request contains unexpected fields"
-      },
-      {
-        status: 400
-      }
+  if (hasUnexpectedFields(data, PRODUCT_FIELDS)) {
+    return errorResponse(
+      "Request contains unexpected fields",
+      400
     )
   }
 
-  if (
-    typeof data.price !== "number" || 
-    data.price <=0) {
+  const product = validateProductData(data)
 
-    return Response.json(
-      {
-        success: false,
-        message: "Product price must be a number greater than 0"
-      },
-      {
-        status: 400
-      }
+  if (product === null) {
+    return errorResponse(
+      "Invalid product data",
+      400
     )
-  }
-
-  if (
-    typeof data.name !== "string" || 
-    data.name.trim() === "") {
-    return Response.json(
-      {
-        success: false,
-        message: "Product name is required"
-      },
-      {
-        status: 400
-      }
-    )
-  }
-
-  const productName = data.name.trim()
-
-  const product: CreateProductInput = {
-    name: productName,
-    price: data.price
   }
 
   try {
@@ -308,31 +181,22 @@ export async function POST( request: Request) {
       [product.name, product.price]
     )
   
-    return Response.json(
+    return successResponse(
+      "Product created successfully!",
       {
-        success: true,
-        message: "Product created successfully!",
-        data: {
-          id: result.insertId,
-          name: product.name,
-          price: product.price
-        }
+        id: result.insertId,
+        name: product.name,
+        price: product.price
       },
-      {
-        status: 201
-      }
+      201
     )
+
   } catch (error) {
     console.error(error)
 
-    return Response.json(
-      {
-        success: false,
-        message: "Failed to create product"
-      },
-      {
-        status: 500
-      }
+    return handleError(
+      error,
+      "Failed to create product"
     )
   }
 }

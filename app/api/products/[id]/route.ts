@@ -196,24 +196,10 @@ export async function PATCH(
   }
 
   try {
-
-    const fields: string[] = []
-    const values: (string | number)[] = []
-
-    if (product.name !== undefined) {
-      fields.push("name = ?")
-      values.push(product.name)
-    }
-
-    if (product.price !== undefined) {
-      fields.push("price = ?")
-      values.push(product.price)
-    }
     
     const result = await updateProductFields(
       productId,
-      fields,
-      values
+      product
     )
   
     if (result.affectedRows === 0) {
