@@ -60,9 +60,6 @@ export async function GET( request: Request ) {
     )
   }
 
-  
-
-
   const allowedSorts = [
     "price_asc",
     "price_desc"
